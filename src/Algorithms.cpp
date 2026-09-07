@@ -2,14 +2,11 @@
 
 #include <algorithm>
 #include <functional>
-#include <limits>
 #include <queue>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace {
 using Item = std::pair<double, std::int64_t>;
-constexpr double INF = std::numeric_limits<double>::infinity();
 
 std::vector<std::int64_t> reconstruct(std::int64_t source,
                                       std::int64_t target,
@@ -62,26 +59,31 @@ PathResult dijkstra(const Graph& graph, std::int64_t source, std::int64_t target
 PathResult aStar(const Graph& graph, std::int64_t source, std::int64_t target) {
     if (!graph.hasNode(source) || !graph.hasNode(target)) return {};
 
-    std::unordered_map<std::int64_t, double> g;
+    std::unordered_map<std::int64_t, double> g_score;
     std::unordered_map<std::int64_t, std::int64_t> parent;
     std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
     const auto& goal = graph.node(target);
-    g[source] = 0.0;
+    g_score[source] = 0.0;
     const auto& start = graph.node(source);
     open.push({haversineMeters(start.lat, start.lon, goal.lat, goal.lon), source});
     std::size_t expanded = 0;
 
     while (!open.empty()) {
         const auto [f, u] = open.top();
-        (void)f;
         open.pop();
+
+        const auto& u_node = graph.node(u);
+        const double expected_f = g_score[u] +
+            haversineMeters(u_node.lat, u_node.lon, goal.lat, goal.lon);
+        if (f > expected_f + 1e-9) continue;
+
         ++expanded;
         if (u == target) break;
 
         for (const auto& edge : graph.neighbors(u)) {
-            const double tentative = g[u] + edge.distance_m;
-            if (!g.count(edge.to) || tentative < g[edge.to]) {
-                g[edge.to] = tentative;
+            const double tentative = g_score[u] + edge.distance_m;
+            if (!g_score.count(edge.to) || tentative < g_score[edge.to]) {
+                g_score[edge.to] = tentative;
                 parent[edge.to] = u;
                 const auto& n = graph.node(edge.to);
                 const double h = haversineMeters(n.lat, n.lon, goal.lat, goal.lon);
@@ -90,18 +92,6 @@ PathResult aStar(const Graph& graph, std::int64_t source, std::int64_t target) {
         }
     }
 
-    if (!g.count(target)) return {0.0, {}, expanded, false};
-    return {g[target], reconstruct(source, target, parent), expanded, true};
-}
-
-PathResult bidirectionalDijkstra(const Graph& graph, std::int64_t source, std::int64_t target) {
-    if (!graph.hasNode(source) || !graph.hasNode(target)) return {};
-    if (source == target) return {0.0, {source}, 0, true};
-
-    // For a directed road graph we construct reverse adjacency only for the search.
-    std::unordered_map<std::int64_t, std::vector<Edge>> reverse;
-    // Build it by exploring all reachable nodes from the source-side graph is not enough,
-    // so this implementation falls back to Dijkstra when reverse adjacency is unavailable.
-    // The public benchmark still exposes this function for extension to persistent reverse graphs.
-    return dijkstra(graph, source, target);
+    if (!g_score.count(target)) return {0.0, {}, expanded, false};
+    return {g_score[target], reconstruct(source, target, parent), expanded, true};
 }
