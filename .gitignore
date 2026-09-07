@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.out
+.DS_Store
+__pycache__/
+.venv/
+# Generated real OSM extracts can be large
+data/nodes.csv
+data/edges.csv
