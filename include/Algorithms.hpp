@@ -14,4 +14,3 @@ struct PathResult {
 
 PathResult dijkstra(const Graph& graph, std::int64_t source, std::int64_t target);
 PathResult aStar(const Graph& graph, std::int64_t source, std::int64_t target);
-PathResult bidirectionalDijkstra(const Graph& graph, std::int64_t source, std::int64_t target);
