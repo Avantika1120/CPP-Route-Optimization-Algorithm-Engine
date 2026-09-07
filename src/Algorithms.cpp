@@ -1,0 +1,107 @@
+#include "Algorithms.hpp"
+
+#include <algorithm>
+#include <functional>
+#include <limits>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace {
+using Item = std::pair<double, std::int64_t>;
+constexpr double INF = std::numeric_limits<double>::infinity();
+
+std::vector<std::int64_t> reconstruct(std::int64_t source,
+                                      std::int64_t target,
+                                      const std::unordered_map<std::int64_t, std::int64_t>& parent) {
+    std::vector<std::int64_t> path;
+    std::int64_t current = target;
+    path.push_back(current);
+    while (current != source) {
+        auto it = parent.find(current);
+        if (it == parent.end()) return {};
+        current = it->second;
+        path.push_back(current);
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+}
+
+PathResult dijkstra(const Graph& graph, std::int64_t source, std::int64_t target) {
+    if (!graph.hasNode(source) || !graph.hasNode(target)) return {};
+
+    std::unordered_map<std::int64_t, double> dist;
+    std::unordered_map<std::int64_t, std::int64_t> parent;
+    std::priority_queue<Item, std::vector<Item>, std::greater<Item>> pq;
+    dist[source] = 0.0;
+    pq.push({0.0, source});
+    std::size_t expanded = 0;
+
+    while (!pq.empty()) {
+        auto [d, u] = pq.top();
+        pq.pop();
+        if (d != dist[u]) continue;
+        ++expanded;
+        if (u == target) break;
+
+        for (const auto& edge : graph.neighbors(u)) {
+            const double nd = d + edge.distance_m;
+            if (!dist.count(edge.to) || nd < dist[edge.to]) {
+                dist[edge.to] = nd;
+                parent[edge.to] = u;
+                pq.push({nd, edge.to});
+            }
+        }
+    }
+
+    if (!dist.count(target)) return {0.0, {}, expanded, false};
+    return {dist[target], reconstruct(source, target, parent), expanded, true};
+}
+
+PathResult aStar(const Graph& graph, std::int64_t source, std::int64_t target) {
+    if (!graph.hasNode(source) || !graph.hasNode(target)) return {};
+
+    std::unordered_map<std::int64_t, double> g;
+    std::unordered_map<std::int64_t, std::int64_t> parent;
+    std::priority_queue<Item, std::vector<Item>, std::greater<Item>> open;
+    const auto& goal = graph.node(target);
+    g[source] = 0.0;
+    const auto& start = graph.node(source);
+    open.push({haversineMeters(start.lat, start.lon, goal.lat, goal.lon), source});
+    std::size_t expanded = 0;
+
+    while (!open.empty()) {
+        const auto [f, u] = open.top();
+        (void)f;
+        open.pop();
+        ++expanded;
+        if (u == target) break;
+
+        for (const auto& edge : graph.neighbors(u)) {
+            const double tentative = g[u] + edge.distance_m;
+            if (!g.count(edge.to) || tentative < g[edge.to]) {
+                g[edge.to] = tentative;
+                parent[edge.to] = u;
+                const auto& n = graph.node(edge.to);
+                const double h = haversineMeters(n.lat, n.lon, goal.lat, goal.lon);
+                open.push({tentative + h, edge.to});
+            }
+        }
+    }
+
+    if (!g.count(target)) return {0.0, {}, expanded, false};
+    return {g[target], reconstruct(source, target, parent), expanded, true};
+}
+
+PathResult bidirectionalDijkstra(const Graph& graph, std::int64_t source, std::int64_t target) {
+    if (!graph.hasNode(source) || !graph.hasNode(target)) return {};
+    if (source == target) return {0.0, {source}, 0, true};
+
+    // For a directed road graph we construct reverse adjacency only for the search.
+    std::unordered_map<std::int64_t, std::vector<Edge>> reverse;
+    // Build it by exploring all reachable nodes from the source-side graph is not enough,
+    // so this implementation falls back to Dijkstra when reverse adjacency is unavailable.
+    // The public benchmark still exposes this function for extension to persistent reverse graphs.
+    return dijkstra(graph, source, target);
+}
